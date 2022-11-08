@@ -2,6 +2,8 @@ import inspect
 from types import FunctionType
 from typing import Any
 
+from loggers import logger
+
 
 class TypedObjectMeta(type):
 
@@ -18,7 +20,6 @@ class TypedObjectMeta(type):
                         raise TypeError(f'Type {variable} is not correct')
                     count += 1
             return function(*args, **kwargs)
-
         return wrapper
 
     @classmethod
@@ -29,7 +30,7 @@ class TypedObjectMeta(type):
             if _ not in ['__module__', '__qualname__', '__annotations__']:
                 if type(dct[_]) == FunctionType:
                     methods.add(dct[_])
-                else:
+                elif not isinstance(dct[_], type):
                     variables[_] = dct[_]
         return methods, variables
 
