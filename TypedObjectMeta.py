@@ -2,7 +2,7 @@ import inspect
 from types import FunctionType
 from typing import Any
 
-from loggers import logger
+import loggers
 
 
 class TypedObjectMeta(type):
@@ -10,8 +10,12 @@ class TypedObjectMeta(type):
     @staticmethod
     def check_type(function):
         def wrapper(*args, **kwargs):
+            return_type = None
             count = 1
             for variable in function.__annotations__:
+                if variable == 'return':
+                    return_type = function.__annotations__[variable]
+                    continue
                 if variable in locals()['kwargs']:
                     if type(locals()['kwargs'][variable]) != function.__annotations__[variable]:
                         raise TypeError(f'Type {variable} is not correct')
@@ -19,7 +23,14 @@ class TypedObjectMeta(type):
                     if type(locals()['args'][count]) != function.__annotations__[variable]:
                         raise TypeError(f'Type {variable} is not correct')
                     count += 1
-            return function(*args, **kwargs)
+            result = function(*args, **kwargs)
+            if result is None:
+                result_type = result
+            else:
+                result_type = type(result)
+            if result_type == return_type:
+                return result
+            raise TypeError(f'The function return incorrect typed value')
         return wrapper
 
     @classmethod
