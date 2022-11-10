@@ -1,4 +1,5 @@
 import inspect
+import shelve
 from types import FunctionType
 from typing import Any
 
@@ -35,8 +36,7 @@ class TypedObjectMeta(type):
 
     @classmethod
     def _create_attrs(mcs, dct):
-        methods = set()
-        variables = dict()
+        methods, variables = set(), dict()
         for _ in dct:
             if _ not in ['__module__', '__qualname__', '__annotations__']:
                 if type(dct[_]) == FunctionType:
@@ -46,7 +46,7 @@ class TypedObjectMeta(type):
         return methods, variables
 
     @classmethod
-    def _validate_methods(mcs, methods: set[FunctionType]) -> bool:
+    def is_methods_validate(mcs, methods: set[FunctionType]) -> bool:
         for method in methods:
             attrs = set(inspect.signature(method).parameters)
             annotations = method.__annotations__
@@ -59,21 +59,26 @@ class TypedObjectMeta(type):
         return True
 
     @classmethod
-    def _validate_variables(mcs, dct, variables: dict[str, Any]) -> bool:
-        if len(variables) == 0:
-            return True
-        for variable in variables:
-            if dct.get('__annotations__') is None or variable not in dct['__annotations__'] or type(
-                    variables[variable]) != dct['__annotations__'][variable]:
-                raise TypeError(f'{variable} type is not correct')
+    def is_variables_validate(mcs, dct, variables: dict[str, Any]) -> bool:
+        if len(variables) != 0:
+            for variable in variables:
+                if dct.get(
+                        '__annotations__'
+                ) is None or variable not in dct['__annotations__'] or type(
+                        variables[variable]) != dct['__annotations__'][variable]:
+                    raise TypeError(f'{variable} type is not correct')
         return True
 
     def __new__(mcs, name, bases, dct):
+        cls = super().__new__(mcs, name, bases, dct)
         if name != 'TypedObject':
+            types = shelve.open(f'{name}')
+            source = inspect.getsource(cls)
             methods, variables = mcs._create_attrs(dct)
-            if mcs._validate_methods(methods) and mcs._validate_variables(dct, variables):
-                for method in methods:
-                    dct[method.__name__] = TypedObjectMeta.check_type(method)
-                return super().__new__(mcs, name, bases, dct)
-        else:
-            return super().__new__(mcs, name, bases, dct)
+            if types.get('source') != source:
+                loggers.logger.debug(f'{cls.__name__}')
+                if mcs.is_methods_validate(methods) and mcs.is_variables_validate(dct, variables):
+                    types['source'] = source
+            for method in methods:
+                setattr(cls, method.__name__, TypedObjectMeta.check_type(method))
+        return cls
