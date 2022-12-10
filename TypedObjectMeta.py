@@ -1,5 +1,5 @@
 import inspect
-import shelve
+
 from types import FunctionType
 from typing import Any
 
@@ -10,28 +10,31 @@ class TypedObjectMeta(type):
 
     @staticmethod
     def check_type(function):
+
         def wrapper(*args, **kwargs):
-            return_type = None
+            return_type = inspect.signature(function).return_annotation
+            signature = inspect.signature(function)
+            parameters = dict(signature.parameters)
+            parameters.pop('self')
+
             count = 1
-            for variable in function.__annotations__:
-                if variable == 'return':
-                    return_type = function.__annotations__[variable]
-                    continue
-                if variable in locals()['kwargs']:
-                    if type(locals()['kwargs'][variable]) != function.__annotations__[variable]:
-                        raise TypeError(f'Type {variable} is not correct')
-                else:
-                    if type(locals()['args'][count]) != function.__annotations__[variable]:
-                        raise TypeError(f'Type {variable} is not correct')
-                    count += 1
+            for parameter in parameters:
+
+                try:
+                    if parameter in kwargs:
+                        if type(kwargs[parameter]) == parameters[parameter].annotation:
+                            continue
+                    elif type(args[count]) == parameters[parameter].annotation:
+                        count += 1
+                        continue
+                except IndexError:
+                    if type(parameters[parameter].default) == parameters[parameter].annotation:
+                        continue
+                raise TypeError(f'Type {parameter} is not correct')
+
             result = function(*args, **kwargs)
-            if result is None:
-                result_type = result
-            else:
-                result_type = type(result)
-            if result_type == return_type:
+            if (return_type, result) == (None, None) or return_type == type(result):
                 return result
-            raise TypeError(f'The function return incorrect typed value')
         return wrapper
 
     @classmethod
@@ -71,14 +74,8 @@ class TypedObjectMeta(type):
 
     def __new__(mcs, name, bases, dct):
         cls = super().__new__(mcs, name, bases, dct)
-        if name != 'TypedObject':
-            types = shelve.open(f'{name}')
-            source = inspect.getsource(cls)
-            methods, variables = mcs._create_attrs(dct)
-            if types.get('source') != source:
-                loggers.logger.debug(f'{cls.__name__}')
-                if mcs.is_methods_validate(methods) and mcs.is_variables_validate(dct, variables):
-                    types['source'] = source
+        methods, variables = mcs._create_attrs(dct)
+        if mcs.is_methods_validate(methods) and mcs.is_variables_validate(dct, variables):
             for method in methods:
                 setattr(cls, method.__name__, TypedObjectMeta.check_type(method))
         return cls
