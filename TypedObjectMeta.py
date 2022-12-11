@@ -3,13 +3,12 @@ import inspect
 from types import FunctionType
 from typing import Any
 
-import loggers
-
 
 class TypedObjectMeta(type):
 
     @staticmethod
     def check_type(function):
+        """The function to checking attributes types and type of return value. It's a decorator"""
 
         def wrapper(*args, **kwargs):
             return_type = inspect.signature(function).return_annotation
@@ -35,10 +34,13 @@ class TypedObjectMeta(type):
             result = function(*args, **kwargs)
             if (return_type, result) == (None, None) or return_type == type(result):
                 return result
+
         return wrapper
 
     @classmethod
     def _create_attrs(mcs, dct):
+        """The function create lists of methods and static variables in Class"""
+
         methods, variables = set(), dict()
         for _ in dct:
             if _ not in ['__module__', '__qualname__', '__annotations__']:
@@ -50,6 +52,8 @@ class TypedObjectMeta(type):
 
     @classmethod
     def is_methods_validate(mcs, methods: set[FunctionType]) -> bool:
+        """The function to checking annotations in methods"""
+
         for method in methods:
             attrs = set(inspect.signature(method).parameters)
             annotations = method.__annotations__
@@ -63,6 +67,8 @@ class TypedObjectMeta(type):
 
     @classmethod
     def is_variables_validate(mcs, dct, variables: dict[str, Any]) -> bool:
+        """The function to checking static variables annotations"""
+
         if len(variables) != 0:
             for variable in variables:
                 if dct.get(
@@ -73,6 +79,8 @@ class TypedObjectMeta(type):
         return True
 
     def __new__(mcs, name, bases, dct):
+        """The function to checking annotations and decorating function by check_type"""
+
         cls = super().__new__(mcs, name, bases, dct)
         methods, variables = mcs._create_attrs(dct)
         if mcs.is_methods_validate(methods) and mcs.is_variables_validate(dct, variables):
